@@ -35,7 +35,7 @@ class Ship(base_game_object.BaseGameObject):
         :param units_left:
         :param units_per_turn:
         """
-        super().__init__(id, position[0], position[0])
+        super().__init__(id, position[0], position[1])
 
         self.custom = custom
         self.hp = hp

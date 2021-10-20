@@ -89,7 +89,7 @@ class BaseObjectCollection(typing.Generic[T]):
         :param y:
         """
         for obj in self.objects:
-            if x == obj.x and y == obj.y:
+            if int(x) == int(obj.x) and int(y) == int(obj.y):
                 return obj
 
         raise ValueError("Could not find object at {}, {}".format(x, y))
