@@ -13,3 +13,4 @@ from BattleshAPy.game_object.ship_game_object import Ship                       
 from BattleshAPy.game_object.player_game_object import Player                           # noqa
 from BattleshAPy.game_object.island_game_object import Island                           # noqa
 from BattleshAPy.ship_ids import *                                                      # noqa
+from BattleshAPy.exceptions import *                                                    # noqa

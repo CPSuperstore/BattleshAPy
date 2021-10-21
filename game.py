@@ -16,6 +16,7 @@ import BattleshAPy.game_object_collection.player_collection as player_collection
 import BattleshAPy.game_object_collection.ship_collection as ship_collection
 import BattleshAPy.store_object.ship_store_object as ship_store_object
 import BattleshAPy.utils as utils
+import BattleshAPy.exceptions as exceptions
 
 
 class Game(abc.ABC):
@@ -64,6 +65,7 @@ class Game(abc.ABC):
 
     def _poll_game_status(self) -> dict:
         r = requests.get(self.url_base + "/game", headers=self._headers())
+        self._handle_error(r)
         return r.json()
 
     def get_player_count(self) -> int:
@@ -83,7 +85,7 @@ class Game(abc.ABC):
         status = self._poll_game_status()
         return status.get("status", "running").lower() != "waiting"
 
-    def wait_for_game_start(self, poll_every: float = 0.5) -> 'game':
+    def wait_for_game_start(self, poll_every: float = 0.5) -> 'Game':
         """
         Blocks until the game has started
         :param poll_every: the interval to poll the server at. Minimum is 0.3s
@@ -97,7 +99,7 @@ class Game(abc.ABC):
             time.sleep(max([0.3, poll_every - (time.time() - start)]))
             return self
 
-    def wait_for_player_count(self, count: int, poll_every: float = 0.5) -> 'game':
+    def wait_for_player_count(self, count: int, poll_every: float = 0.5) -> 'Game':
         """
         Blocks until the game has a defined number of players joined
         :param count: number of players
@@ -114,7 +116,7 @@ class Game(abc.ABC):
 
         return self
 
-    def wait_for_time(self, delay: float) -> 'game':
+    def wait_for_time(self, delay: float) -> 'Game':
         """
         Blocks for a defined amount of time. This is a wrapper for time.sleep()
         It was included for its ability to be chained, and completeness
@@ -123,11 +125,12 @@ class Game(abc.ABC):
         time.sleep(delay)
         return self
 
-    def start_game(self) -> 'game':
+    def start_game(self) -> 'Game':
         """
         Sends the command to start the game
         """
-        requests.put(self.url_base + "/game", headers=self._headers())
+        r = requests.put(self.url_base + "/game", headers=self._headers())
+        self._handle_error(r)
         return self
 
     def is_my_turn(self) -> bool:
@@ -135,6 +138,7 @@ class Game(abc.ABC):
         Determines if it is my turn or not
         """
         r = requests.get(self.url_base + "/turn", headers=self._headers())
+        self._handle_error(r)
         return r.json()["is_me"]
 
     def get_current_turn(self) -> player_game_object.Player:
@@ -142,10 +146,15 @@ class Game(abc.ABC):
         Returns the player whose turn it currently is
         """
         r = requests.get(self.url_base + "/turn", headers=self._headers())
+        self._handle_error(r)
         return self.players.get_by_id(r.json()["turn"])
 
     def _end_turn(self):
-        requests.post(self.url_base + "/turn", headers=self._headers())
+        r = requests.post(self.url_base + "/turn", headers=self._headers())
+        try:
+            self._handle_error(r)
+        except exceptions.NotYourTurnException:
+            pass
 
     @abc.abstractmethod
     def on_turn_start(self):
@@ -156,10 +165,12 @@ class Game(abc.ABC):
 
     def _update_islands(self):
         r = requests.get(self.url_base + "/island", headers=self._headers())
+        self._handle_error(r)
         self.islands.from_json(r.json())
 
     def _update_ships(self):
         r = requests.get(self.url_base + "/ship", headers=self._headers())
+        self._handle_error(r)
 
         player_data = r.json()
         for p in player_data:
@@ -185,7 +196,15 @@ class Game(abc.ABC):
         status = self._poll_game_status()
 
         self.base_locations.clear()
-        self.base_locations[status["me"]["id"]] = status["me"]["base"]["x"], status["me"]["base"]["y"]
+        try:
+            self.base_locations[status["me"]["id"]] = status["me"]["base"]["x"], status["me"]["base"]["y"]
+        except KeyError:
+            raise exceptions.GameNotStartedException(
+                "The game has not been started yet. Could not begin playing the game. "
+                "Either call 'start_game' if you created the game or call "
+                "'wait_for_game_start' to block until the game starts."
+            )
+
         for o in status["opponents"]:
             self.base_locations[o["id"]] = o["base"]["x"], o["base"]["y"]
 
@@ -211,8 +230,14 @@ class Game(abc.ABC):
         r = requests.post(self.url_base + "/store", headers=self._headers(), json={
             "ship": ship_id
         })
+        self._handle_error(r)
         self._update_ships()
         return self.me.ships.get_by_id(r.json()["id"])
+
+    def _handle_error(self, r: requests.Response):
+        if r.status_code == 409:
+            response = r.json()
+            raise exceptions.CODE_EXCEPTION_LOOKUP[response["code"]](response["message"])
 
     def get_store_inventory(self) -> typing.List[ship_store_object.ShipStore]:
         """
@@ -222,6 +247,7 @@ class Game(abc.ABC):
         """
         result = []
         r = requests.get(self.url_base + "/store", headers=self._headers())
+        self._handle_error(r)
         for item in r.json():
             item["game"] = self
             result.append(ship_store_object.ShipStore(**item))
@@ -238,13 +264,14 @@ class Game(abc.ABC):
         if isinstance(ship, ship_game_object.Ship):
             ship = ship.id
 
-        requests.post(
+        r = requests.post(
             self.url_base + "/ship", headers=self._headers(), json={
                 "action": "move",
                 "position": [x, y],
                 "ship": ship
             }
         )
+        self._handle_error(r)
 
     def move_ship_relative(self, ship: typing.Union[str, ship_game_object.Ship], x: int, y: int):
         """
@@ -256,13 +283,14 @@ class Game(abc.ABC):
         if isinstance(ship, ship_game_object.Ship):
             ship = ship.id
 
-        requests.post(
+        r = requests.post(
             self.url_base + "/ship", headers=self._headers(), json={
                 "action": "move",
                 "relative": [x, y],
                 "ship": ship
             }
         )
+        self._handle_error(r)
 
     def shoot_ship(self, ship: typing.Union[str, ship_game_object.Ship], x: int, y: int, repeat: int = 1):
         """
@@ -275,7 +303,7 @@ class Game(abc.ABC):
         if isinstance(ship, ship_game_object.Ship):
             ship = ship.id
 
-        requests.post(
+        r = requests.post(
             self.url_base + "/ship", headers=self._headers(), json={
                 "action": "shoot",
                 "position": [x, y],
@@ -283,6 +311,7 @@ class Game(abc.ABC):
                 "repeat": repeat
             }
         )
+        self._handle_error(r)
 
     def shoot_ship_relative(self, ship: typing.Union[str, ship_game_object.Ship], x: int, y: int, repeat: int = 1):
         """
@@ -295,7 +324,7 @@ class Game(abc.ABC):
         if isinstance(ship, ship_game_object.Ship):
             ship = ship.id
 
-        requests.post(
+        r = requests.post(
             self.url_base + "/ship", headers=self._headers(), json={
                 "action": "shoot",
                 "relative": [x, y],
@@ -303,3 +332,4 @@ class Game(abc.ABC):
                 "repeat": repeat
             }
         )
+        self._handle_error(r)

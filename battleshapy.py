@@ -7,6 +7,7 @@ import requests.auth as auth
 
 import BattleshAPy.game as game
 import BattleshAPy.utils as utils
+import BattleshAPy.exceptions as exceptions
 
 
 class BattleshAPy:
@@ -53,6 +54,8 @@ class BattleshAPy:
             ), auth=auth.HTTPBasicAuth(self.client_id, self.client_secret)
         )
 
+        self._handle_error(r)
+
         if r.status_code == 200:
             response = r.json()
             return game_class_ref(response["game_id"], response["token"])
@@ -71,6 +74,8 @@ class BattleshAPy:
             ), auth=auth.HTTPBasicAuth(self.client_id, self.client_secret)
         )
 
+        self._handle_error(r)
+
         if r.status_code == 200:
             response = r.json()
             return game_class_ref(response["game_id"], response["token"])
@@ -85,3 +90,8 @@ class BattleshAPy:
         :return:
         """
         return game_class_ref(game_id, token)
+
+    def _handle_error(self, r: requests.Response):
+        if r.status_code == 409:
+            response = r.json()
+            raise exceptions.CODE_EXCEPTION_LOOKUP[response["code"]](response["message"])
