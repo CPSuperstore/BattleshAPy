@@ -3,8 +3,11 @@ This module contains the game class which represents a single bot playing a sing
 """
 import abc
 import datetime
+import os.path
 import time
+import traceback
 import typing
+import json
 
 import requests
 
@@ -17,6 +20,7 @@ import BattleshAPy.game_object_collection.ship_collection as ship_collection
 import BattleshAPy.store_object.ship_store_object as ship_store_object
 import BattleshAPy.utils as utils
 import BattleshAPy.exceptions as exceptions
+import BattleshAPy.local_data.player_ship as local_player_ship
 
 
 class Game(abc.ABC):
@@ -52,6 +56,9 @@ class Game(abc.ABC):
 
         # test credentials
         self._poll_game_status()
+
+        self.local_player_ship_data = {}
+        self._load_local_player_ship_data()
 
         self.on_create()
 
@@ -94,10 +101,9 @@ class Game(abc.ABC):
         while True:
             start = time.time()
             if self.is_game_started():
-                break
+                return self
 
             time.sleep(max([0.3, poll_every - (time.time() - start)]))
-            return self
 
     def wait_for_player_count(self, count: int, poll_every: float = 0.5) -> 'Game':
         """
@@ -168,12 +174,41 @@ class Game(abc.ABC):
         self._handle_error(r)
         self.islands.from_json(r.json())
 
+    def flush_local_player_ship_data(self):
+        with open("local_data.json", 'w') as f:
+            data = {k: v.to_dict() for k, v in self.local_player_ship_data.items()}
+            f.write(json.dumps(data))
+
+    def _load_local_player_ship_data(self):
+        if not os.path.isfile("local_data.json"):
+            self.local_player_ship_data = {}
+            return
+
+        with open("local_data.json", 'r') as f:
+            try:
+                for ship_id, data in json.loads(f.read()).items():
+                    self.local_player_ship_data[ship_id] = local_player_ship.PlayerShip.from_dict(data)
+
+            except json.JSONDecodeError:
+                self.local_player_ship_data = {}
+
     def _update_ships(self):
         r = requests.get(self.url_base + "/ship", headers=self._headers())
         self._handle_error(r)
 
         player_data = r.json()
         for p in player_data:
+            if p["me"] is True:
+                for s in p["ships"]:
+                    if s["id"] not in self.local_player_ship_data:
+                        self.local_player_ship_data[s["id"]] = local_player_ship.PlayerShip(s["id"])
+
+                    s["player_ship"] = self.local_player_ship_data[s["id"]]
+
+            else:
+                for s in p["ships"]:
+                    s["player_ship"] = None
+
             p["ships"] = ship_collection.ShipCollection([]).from_json(p["ships"])
             p["game"] = self
             p["x"], p["y"] = self.base_locations[p["id"]]
@@ -184,6 +219,24 @@ class Game(abc.ABC):
 
         for p in self.players.objects:
             p.post_process_ships()
+
+    def _run_autopilot_cycle(self):
+        for ship in self.me.ships.objects:
+            ship.move_ship_relative(*ship.get_next_move())
+
+    def get_free_islands(self) -> island_collection.IslandCollection:
+        result = []
+        for island in self.islands.objects:
+            if not self.is_position_occupied(island.x, island.y):
+                result.append(island)
+
+        return island_collection.IslandCollection(result)
+
+    def is_position_occupied(self, x: int, y: int) -> ship_game_object.Ship:
+        for p in self.players.objects:
+            for ship in p.ships.objects:
+                if ship.x == x and ship.y == y:
+                    return ship
 
     def play(self, poll_every: float = 0.5):
         """
@@ -214,8 +267,13 @@ class Game(abc.ABC):
         while True:
             start = time.time()
             if self.is_my_turn():
-                self._update_ships()
-                self.on_turn_start()
+                try:
+                    self._update_ships()
+                    self._run_autopilot_cycle()
+                    self.on_turn_start()
+                except Exception:
+                    traceback.print_exc()
+
                 self._end_turn()
 
             time.sleep(max([0.3, poll_every - (time.time() - start)]))
@@ -237,7 +295,10 @@ class Game(abc.ABC):
     def _handle_error(self, r: requests.Response):
         if r.status_code == 409:
             response = r.json()
-            raise exceptions.CODE_EXCEPTION_LOOKUP[response["code"]](response["message"])
+            try:
+                raise exceptions.CODE_EXCEPTION_LOOKUP[response["code"]](response["message"])
+            except KeyError:
+                raise exceptions.ConflictException(response["message"])
 
     def get_store_inventory(self) -> typing.List[ship_store_object.ShipStore]:
         """

@@ -17,7 +17,7 @@ class BaseObjectCollection(typing.Generic[T]):
         :param object_type:
         :param objects:
         """
-        self.objects = objects
+        self.objects = objects              # type: typing.List[T]
         self.object_type = object_type
 
     def get_all_by_distance(self, x: int, y: int) -> typing.List[typing.Tuple[T, int]]:
@@ -28,7 +28,7 @@ class BaseObjectCollection(typing.Generic[T]):
         :param y:
         """
         objects = [(o, o.distance(x, y)) for o in self.objects]
-        objects.sort(key=lambda o: o[1], reverse=True)
+        objects.sort(key=lambda o: o[1], reverse=False)
 
         return objects
 

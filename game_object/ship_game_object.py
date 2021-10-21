@@ -2,8 +2,10 @@
 This module contains the Ship game object
 """
 import typing
+import math
 
 import BattleshAPy.game_object.base_game_object as base_game_object
+import BattleshAPy.local_data.player_ship as local_player_ship
 
 if typing.TYPE_CHECKING:
     import BattleshAPy.game_object.player_game_object as player_game_object
@@ -18,7 +20,7 @@ class Ship(base_game_object.BaseGameObject):
     def __init__(
             self, custom: bool, hp: int, id: str, max_hp: int, name: str, position: typing.Tuple[int, int], price: int,
             shot_damage: int, shot_range: int, shots_left: int, shots_per_turn: int, units_left: int,
-            units_per_turn: int
+            units_per_turn: int, player_ship: local_player_ship.PlayerShip
     ):
         """
         :param custom:
@@ -50,6 +52,8 @@ class Ship(base_game_object.BaseGameObject):
         self.units_per_turn = units_per_turn
         self.player = None              # type: player_game_object.Player
 
+        self.local_player_ship = player_ship
+
     @property
     def game(self) -> 'game.Game':
         """
@@ -80,6 +84,9 @@ class Ship(base_game_object.BaseGameObject):
         :param y:
         :return:
         """
+        if x == 0 and y == 0:
+            return
+
         self.game.move_ship_relative(self, x, y)
 
     def shoot_ship(self, x: int, y: int, repeat: int = 1):
@@ -101,3 +108,33 @@ class Ship(base_game_object.BaseGameObject):
         :return:
         """
         self.game.shoot_ship_relative(self, x, y, repeat)
+
+    def get_next_move(self) -> typing.Tuple[int, int]:
+        if self.local_player_ship.target_x == self.x or self.local_player_ship.target_x is None:
+            self.local_player_ship.target_x = None
+            dx = 0
+
+        else:
+            dx = self.local_player_ship.target_x - self.x
+
+        if self.local_player_ship.target_y == self.y or self.local_player_ship.target_y is None:
+            self.local_player_ship.target_y = None
+            dy = 0
+
+        else:
+            dy = self.local_player_ship.target_y - self.y
+
+        if dx >= self.units_left:
+            return int(math.copysign(self.units_left, dx)), 0
+
+        remaining = dx - self.units_left
+
+        return dx, min([dy, int(math.copysign(remaining, dy))])
+
+    def set_target(self, x: int, y: int):
+        self.local_player_ship.target_x = x
+        self.local_player_ship.target_y = y
+
+        self.move_ship_relative(*self.get_next_move())
+
+        self.game.flush_local_player_ship_data()

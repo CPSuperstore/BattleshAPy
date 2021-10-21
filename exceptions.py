@@ -1,44 +1,52 @@
-class GameNotStartedException(Exception):
+class BattleshAPIException(Exception):
     pass
 
 
-class NotYourTurnException(Exception):
+class GameNotStartedException(BattleshAPIException):
     pass
 
 
-class AlreadyRegisteredException(Exception):
+class NotYourTurnException(BattleshAPIException):
     pass
 
 
-class ShipInTheWayException(Exception):
+class AlreadyRegisteredException(BattleshAPIException):
     pass
 
 
-class InsufficientFundsException(Exception):
+class ShipInTheWayException(BattleshAPIException):
     pass
 
 
-class CanNotAccessShipException(Exception):
+class InsufficientFundsException(BattleshAPIException):
     pass
 
 
-class OutOfShotsException(Exception):
+class CanNotAccessShipException(BattleshAPIException):
     pass
 
 
-class CannotAttackHomeBaseException(Exception):
+class OutOfShotsException(BattleshAPIException):
     pass
 
 
-class TargetOutOfRangeException(Exception):
+class CannotAttackHomeBaseException(BattleshAPIException):
     pass
 
 
-class PositionOccupiedException(Exception):
+class TargetOutOfRangeException(BattleshAPIException):
     pass
 
 
-class TargetOutOfBoundsException(Exception):
+class PositionOccupiedException(BattleshAPIException):
+    pass
+
+
+class TargetOutOfBoundsException(BattleshAPIException):
+    pass
+
+
+class ConflictException(BattleshAPIException):
     pass
 
 
