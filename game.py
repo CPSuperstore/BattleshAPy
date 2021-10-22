@@ -232,10 +232,30 @@ class Game(abc.ABC):
 
         return island_collection.IslandCollection(result)
 
+    def get_free_untargeted_islands(self) -> island_collection.IslandCollection:
+        result = []
+        for island in self.islands.objects:
+            if not self.is_position_occupied_or_targeted(island.x, island.y):
+                result.append(island)
+
+        return island_collection.IslandCollection(result)
+
     def is_position_occupied(self, x: int, y: int) -> ship_game_object.Ship:
         for p in self.players.objects:
             for ship in p.ships.objects:
                 if ship.x == x and ship.y == y:
+                    return ship
+
+    def is_position_occupied_or_targeted(self, x: int, y: int) -> ship_game_object.Ship:
+        for p in self.players.objects:
+            for ship in p.ships.objects:
+                if (
+                        ship.x == x and ship.y == y
+                ) or (
+                        ship.local_player_ship.target_x == x and ship.local_player_ship.target_y == y
+                ) or (
+                        ship.local_player_ship.target_y == y and ship.local_player_ship.target_x is None and ship.x == x
+                ):
                     return ship
 
     def play(self, poll_every: float = 0.5):
@@ -315,7 +335,65 @@ class Game(abc.ABC):
 
         return result
 
-    def move_ship(self, ship: typing.Union[str, ship_game_object.Ship], x: int, y: int):
+    def get_min_attribute_from_store(self, attribute: str) -> ship_store_object.ShipStore:
+        smallest = None
+        for ship in self.get_store_inventory():
+            if smallest is None:
+                smallest = ship
+            else:
+                if getattr(ship, attribute) < getattr(smallest, attribute):
+                    smallest = ship
+
+        return smallest
+
+    def get_max_attribute_from_store(self, attribute: str) -> ship_store_object.ShipStore:
+        largest = None
+        for ship in self.get_store_inventory():
+            if largest is None:
+                largest = ship
+            else:
+                if getattr(ship, attribute) > getattr(largest, attribute):
+                    largest = ship
+
+        return largest
+
+    def get_cheapest_ship(self) -> ship_store_object.ShipStore:
+        return self.get_min_attribute_from_store("price")
+
+    def get_weakest_ship(self) -> ship_store_object.ShipStore:
+        return self.get_min_attribute_from_store("max_hp")
+
+    def get_smallest_shot_damage_ship(self) -> ship_store_object.ShipStore:
+        return self.get_min_attribute_from_store("shot_damage")
+
+    def get_smallest_shot_range_ship(self) -> ship_store_object.ShipStore:
+        return self.get_min_attribute_from_store("shot_range")
+
+    def get_smallest_shots_per_turn_ship(self) -> ship_store_object.ShipStore:
+        return self.get_min_attribute_from_store("shots_per_turn")
+
+    def get_smallest_units_per_turn_ship(self) -> ship_store_object.ShipStore:
+        return self.get_min_attribute_from_store("units_per_turn")
+
+    def get_most_expensive_ship(self) -> ship_store_object.ShipStore:
+        return self.get_max_attribute_from_store("price")
+
+    def get_strongest_ship(self) -> ship_store_object.ShipStore:
+        return self.get_max_attribute_from_store("max_hp")
+
+    def get_highest_shot_damage_ship(self) -> ship_store_object.ShipStore:
+        return self.get_max_attribute_from_store("shot_damage")
+
+    def get_highest_shot_range_ship(self) -> ship_store_object.ShipStore:
+        return self.get_max_attribute_from_store("shot_range")
+
+    def get_highest_shots_per_turn_ship(self) -> ship_store_object.ShipStore:
+        return self.get_max_attribute_from_store("shots_per_turn")
+
+    def get_highest_units_per_turn_ship(self) -> ship_store_object.ShipStore:
+        return self.get_max_attribute_from_store("units_per_turn")
+
+    def move_ship(self, ship: typing.Union[str, ship_game_object.Ship], x: int, y: int) -> typing.Tuple[int, int]:
         """
         Moves the provided ship object to the specified coordinates
         :param ship: either the id of the ship you wish to move, OR the ship object
@@ -332,9 +410,18 @@ class Game(abc.ABC):
                 "ship": ship
             }
         )
+
         self._handle_error(r)
 
-    def move_ship_relative(self, ship: typing.Union[str, ship_game_object.Ship], x: int, y: int):
+        position = r.json()["position"]
+        try:
+            ship = self.me.ships.get_by_id(ship)
+            ship.x, ship.y = position
+        except ValueError:
+            pass
+        return position
+
+    def move_ship_relative(self, ship: typing.Union[str, ship_game_object.Ship], x: int, y: int) -> typing.Tuple[int, int]:
         """
         Moves the provided ship object relative to its current position
         :param ship: either the id of the ship you wish to move, OR the ship object
@@ -351,7 +438,16 @@ class Game(abc.ABC):
                 "ship": ship
             }
         )
+
         self._handle_error(r)
+
+        position = r.json()["position"]
+        try:
+            ship = self.me.ships.get_by_id(ship)
+            ship.x, ship.y = position
+        except ValueError:
+            pass
+        return position
 
     def shoot_ship(self, ship: typing.Union[str, ship_game_object.Ship], x: int, y: int, repeat: int = 1):
         """
