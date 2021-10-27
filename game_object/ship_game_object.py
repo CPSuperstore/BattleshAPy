@@ -127,9 +127,9 @@ class Ship(base_game_object.BaseGameObject):
         if dx >= self.units_left:
             return int(math.copysign(self.units_left, dx)), 0
 
-        remaining = dx - self.units_left
+        remaining = self.units_left - abs(dx)
 
-        return dx, min([dy, int(math.copysign(remaining, dy))])
+        return dx, int(math.copysign(min([abs(dy), abs(remaining)]), dy))
 
     def set_target(self, x: int, y: int):
         self.local_player_ship.target_x = x

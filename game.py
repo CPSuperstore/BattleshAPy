@@ -284,12 +284,19 @@ class Game(abc.ABC):
         self.game_size = status["board_size"]
         self.turn_length = datetime.datetime.strptime(status["turn_length"], '%H:%M:%S').time()
 
+        ran_game_start_event = False
+
         while True:
             start = time.time()
             if self.is_my_turn():
                 try:
                     self._update_ships()
                     self._run_autopilot_cycle()
+
+                    if not ran_game_start_event:
+                        self.on_game_start()
+                        ran_game_start_event = True
+
                     self.on_turn_start()
                 except Exception:
                     traceback.print_exc()
@@ -490,3 +497,62 @@ class Game(abc.ABC):
             }
         )
         self._handle_error(r)
+
+    def on_game_start(self):
+        """
+        This event is triggered before the game starts
+        It is run once and only once
+        """
+
+    @staticmethod
+    def distance(x1: int, y1: int, x2: int, y2: int) -> int:
+        """
+        Returns the distance between the specified points
+        """
+        return abs(x2 - x1) + abs(y2 - y1)
+
+    def get_free_position_in_radius(self, x: int, y: int, r: int) -> typing.Tuple[int, int]:
+        min_pos = (x - r, y - r)
+        max_pos = (x + r, y + r)
+
+        center_x = x
+        center_y = y
+
+        player_positions = [(p.x, p.y) for p in self.players.objects]
+
+        for x in range(min_pos[0], max_pos[0] + 1):
+            for y in range(min_pos[1], max_pos[1] + 1):
+                if not (0 <= x <= self.game_size[0] and 0 <= y <= self.game_size[1]):
+                    continue
+
+                if self.distance(x, y, center_x, center_y) > r:
+                    continue
+
+                if (x, y) in player_positions:
+                    continue
+
+                for player in self.players.objects:
+                    try:
+                        player.ships.get_at_position(x, y)
+                        break
+
+                    except ValueError:
+                        pass
+                else:
+                    return x, y
+
+        raise ValueError("There are no free spaces available in a {} unit radius from {}".format(
+            r, (center_x, center_y)
+        ))
+
+    def get_captured_islands(self) -> island_collection.IslandCollection:
+        islands = []
+        for island in self.islands.objects:
+            try:
+                self.me.ships.get_at_position(island.x, island.y)
+                islands.append(island)
+            except ValueError:
+                pass
+
+        return island_collection.IslandCollection(islands)
+

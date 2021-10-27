@@ -32,6 +32,9 @@ class BaseObjectCollection(typing.Generic[T]):
 
         return objects
 
+    def get_all_in_radius(self, x: int, y: int, r: int) -> typing.List[typing.Tuple[T, int]]:
+        return list(filter(lambda ship: ship[1] <= r, self.get_all_by_distance(x, y)))
+
     def get_nearest(self, x: int, y: int) -> typing.Tuple[T, int]:
         """
         Returns the nearest object to the specified location in the format [object, distance]
@@ -121,3 +124,9 @@ class BaseObjectCollection(typing.Generic[T]):
         return "<{} objects={}>".format(
             self.__class__.__name__, len(self.objects)
         )
+
+    def __next__(self):
+        return next(self.objects)
+
+    def __iter__(self):
+        return iter(self.objects)
