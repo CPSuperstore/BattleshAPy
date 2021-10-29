@@ -40,6 +40,7 @@ class Game(abc.ABC):
         :param game_id:
         :param token:
         """
+        self.running = True
         self.game_id = game_id
         self.token = token
 
@@ -304,24 +305,32 @@ class Game(abc.ABC):
 
         ran_game_start_event = False
 
-        while True:
+        while self.running:
             start = time.time()
-            if self.is_my_turn():
-                try:
-                    self._update_ships()
-                    self._run_autopilot_cycle()
 
-                    if not ran_game_start_event:
-                        self.on_game_start()
-                        ran_game_start_event = True
+            try:
+                if self.is_my_turn():
+                    try:
+                        self._update_ships()
+                        self._run_autopilot_cycle()
 
-                    self.on_turn_start()
-                except Exception:
-                    traceback.print_exc()
+                        if not ran_game_start_event:
+                            self.on_game_start()
+                            ran_game_start_event = True
 
-                self._end_turn()
+                        self.on_turn_start()
+                    except exceptions.GameEndedException:
+                        break
 
-            time.sleep(max([0.3, poll_every - (time.time() - start)]))
+                    except Exception:
+                        traceback.print_exc()
+
+                    self._end_turn()
+
+                time.sleep(max([0.3, poll_every - (time.time() - start)]))
+
+            except exceptions.GameEndedException:
+                break
 
     def buy_ship(self, ship_id: str, auto_move: bool = True) -> ship_game_object.Ship:
         """
@@ -357,6 +366,10 @@ class Game(abc.ABC):
                 raise exceptions.CODE_EXCEPTION_LOOKUP[response["code"]](response["message"])
             except KeyError:
                 raise exceptions.ConflictException(response["message"])
+
+        if r.status_code == 404:
+            self.running = False
+            raise exceptions.GameEndedException("The game has ended. Please terminate this script.")
 
     def get_store_inventory(self) -> typing.List[ship_store_object.ShipStore]:
         """

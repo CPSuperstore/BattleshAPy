@@ -50,6 +50,10 @@ class ConflictException(BattleshAPIException):
     pass
 
 
+class GameEndedException(BattleshAPIException):
+    pass
+
+
 CODE_EXCEPTION_LOOKUP = {
     1: NotYourTurnException,
     2: AlreadyRegisteredException,
