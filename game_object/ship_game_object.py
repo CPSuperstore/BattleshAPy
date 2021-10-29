@@ -124,7 +124,7 @@ class Ship(base_game_object.BaseGameObject):
         else:
             dy = self.local_player_ship.target_y - self.y
 
-        if dx >= self.units_left:
+        if abs(dx) >= self.units_left:
             return int(math.copysign(self.units_left, dx)), 0
 
         remaining = self.units_left - abs(dx)

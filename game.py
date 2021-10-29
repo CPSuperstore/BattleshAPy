@@ -234,6 +234,8 @@ class Game(abc.ABC):
             except exceptions.PositionOccupiedException:
                 retry.append(ship)
 
+        retry.reverse()
+
         for ship in retry:
             try:
                 ship.move_ship_relative(*ship.get_next_move())
@@ -321,17 +323,30 @@ class Game(abc.ABC):
 
             time.sleep(max([0.3, poll_every - (time.time() - start)]))
 
-    def buy_ship(self, ship_id: str) -> ship_game_object.Ship:
+    def buy_ship(self, ship_id: str, auto_move: bool = True) -> ship_game_object.Ship:
         """
         Purchase a ship by its ID
         Note that named constants are available with all the default ship IDs
         :param ship_id: the ID of the ship you wish to purchase
+        :param auto_move: in the event a ship is in the way, do we automatically reposition that ship?
         :return: the newly purchased ship
         """
         r = requests.post(self.url_base + "/store", headers=self._headers(), json={
             "ship": ship_id
         })
-        self._handle_error(r)
+        try:
+            self._handle_error(r)
+        except exceptions.ShipInTheWayException as e:
+            if auto_move:
+                ship = self.me.ships.get_by_id(r.json()["ship"])
+                ship.move_ship(*self.get_free_position_in_radius(
+                    self.me.x, self.me.y, ship.units_left
+                ))
+                return self.buy_ship(ship_id, auto_move=False)
+
+            else:
+                raise e
+
         self._update_ships()
         return self.me.ships.get_by_id(r.json()["id"])
 
