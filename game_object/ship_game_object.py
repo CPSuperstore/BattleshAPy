@@ -135,6 +135,13 @@ class Ship(base_game_object.BaseGameObject):
         self.local_player_ship.target_x = x
         self.local_player_ship.target_y = y
 
+        self.game.flush_local_player_ship_data()
+
         self.move_ship_relative(*self.get_next_move())
 
+    def set_attribute(self, attribute: str, value):
+        self.local_player_ship.set_attribute(attribute, value)
         self.game.flush_local_player_ship_data()
+
+    def get_attribute(self, attribute: str, default=local_player_ship.NotSet):
+        return self.local_player_ship.get_attribute(attribute, default)

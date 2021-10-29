@@ -4,6 +4,7 @@ This module contains the game class which represents a single bot playing a sing
 import abc
 import datetime
 import os.path
+import random
 import time
 import traceback
 import typing
@@ -221,8 +222,23 @@ class Game(abc.ABC):
             p.post_process_ships()
 
     def _run_autopilot_cycle(self):
-        for ship in self.me.ships.objects:
-            ship.move_ship_relative(*ship.get_next_move())
+        retry = []
+        for ship in self.me.ships:
+            try:
+                if ship.local_player_ship.target_x is not None or ship.local_player_ship.target_y is not None:
+                    ship.move_ship_relative(*ship.get_next_move())
+
+                    if ship.local_player_ship.target_x is None and ship.local_player_ship.target_y is None:
+                        self.on_ship_arrive(ship)
+
+            except exceptions.PositionOccupiedException:
+                retry.append(ship)
+
+        for ship in retry:
+            try:
+                ship.move_ship_relative(*ship.get_next_move())
+            except exceptions.PositionOccupiedException:
+                pass
 
     def get_free_islands(self) -> island_collection.IslandCollection:
         result = []
@@ -545,6 +561,47 @@ class Game(abc.ABC):
             r, (center_x, center_y)
         ))
 
+    def get_all_free_positions_in_radius(self, x: int, y: int, r: int) -> typing.List[typing.Tuple[int, int]]:
+        min_pos = (x - r, y - r)
+        max_pos = (x + r, y + r)
+
+        center_x = x
+        center_y = y
+
+        result = []
+
+        player_positions = [(p.x, p.y) for p in self.players.objects]
+
+        for x in range(min_pos[0], max_pos[0] + 1):
+            for y in range(min_pos[1], max_pos[1] + 1):
+                if not (0 <= x <= self.game_size[0] and 0 <= y <= self.game_size[1]):
+                    continue
+
+                if self.distance(x, y, center_x, center_y) > r:
+                    continue
+
+                if (x, y) in player_positions:
+                    continue
+
+                for player in self.players.objects:
+                    try:
+                        player.ships.get_at_position(x, y)
+                        break
+
+                    except ValueError:
+                        pass
+                else:
+                    result.append((x, y))
+
+        return result
+
+    def get_n_free_positions_in_radius(self, x: int, y: int, r: int, n: int) -> typing.List[typing.Tuple[int, int]]:
+        return self.get_all_free_positions_in_radius(x, y, r)[:n]
+
+    def order_positions_by_distance(self, positions: typing.List[typing.Tuple[int, int]], x: int, y: int) -> typing.List[typing.Tuple[int, int]]:
+        positions.sort(key=lambda o: self.distance(*o, x, y), reverse=False)
+        return positions
+
     def get_captured_islands(self) -> island_collection.IslandCollection:
         islands = []
         for island in self.islands.objects:
@@ -556,3 +613,17 @@ class Game(abc.ABC):
 
         return island_collection.IslandCollection(islands)
 
+    def on_ship_arrive(self, ship: ship_game_object.Ship):
+        pass
+
+    def get_other_players(self) -> player_collection.PlayerCollection:
+        players = []
+
+        for i in self.players.objects:
+            if i.me is False:
+                players.append(i)
+
+        return player_collection.PlayerCollection(players)
+
+    def get_random_other_player(self) -> player_game_object.Player:
+        return random.choice(self.get_other_players().objects)

@@ -67,6 +67,11 @@ class BaseObjectCollection(typing.Generic[T]):
                 if getattr(obj, attribute) == value:
                     return obj
 
+            elif hasattr(obj, "local_player_ship"):
+                if attribute in obj.local_player_ship.metadata:
+                    if obj.local_player_ship.metadata[attribute] == value:
+                        return obj
+
         raise ValueError("Could not find object with {} {}".format(attribute, value))
 
     def get_all_by_attribute(self, attribute: str, value) -> typing.List[T]:
@@ -81,6 +86,27 @@ class BaseObjectCollection(typing.Generic[T]):
         for obj in self.objects:
             if hasattr(obj, attribute):
                 if getattr(obj, attribute) == value:
+                    result.append(obj)
+
+            elif hasattr(obj, "local_player_ship"):
+                if attribute in obj.local_player_ship.metadata:
+                    if obj.local_player_ship.metadata[attribute] == value:
+                        result.append(obj)
+
+        return result
+
+    def get_all_with_attribute(self, attribute: str) -> typing.List[T]:
+        """
+        Returns all the objects which have the specified attribute,
+        AND the value of the attribute equals the specified value
+        Note that objects which do not have the specified attribute will not be included in the result
+        :param attribute:
+        :param value:
+        """
+        result = []
+        for obj in self.objects:
+            if hasattr(obj, "local_player_ship"):
+                if attribute in obj.local_player_ship.metadata:
                     result.append(obj)
 
         return result
@@ -125,8 +151,11 @@ class BaseObjectCollection(typing.Generic[T]):
             self.__class__.__name__, len(self.objects)
         )
 
-    def __next__(self):
+    def __next__(self) -> T:
         return next(self.objects)
 
     def __iter__(self):
         return iter(self.objects)
+
+    def __getitem__(self, item) -> T:
+        return self.objects[item]
